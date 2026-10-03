@@ -1,0 +1,20 @@
+{
+  "name": "learnup",
+  "version": "1.0.0",
+  "private": true,
+  "description": "LearnUp - plataforma de cursos online (API Node/Express/PostgreSQL + site React/Vite)",
+  "type": "module",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "banco": "node scripts/banco.js",
+    "instalar": "node scripts/instalar.js",
+    "conferir": "node scripts/conferir.js",
+    "dev": "node scripts/dev.js",
+    "db:reset": "npm run db:reset --prefix backend",
+    "db:status": "npm run migrate:status --prefix backend",
+    "test": "npm test --prefix backend",
+    "build": "npm run build --prefix frontend"
+  }
+}

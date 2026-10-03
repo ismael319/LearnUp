@@ -12,8 +12,9 @@ pontuação, badges, fórum, certificados em PDF e verificação pública por c�
 - [Stack](#stack)
 - [Estrutura](#estrutura)
 - [Como rodar](#como-rodar)
-  - [1. Com Docker (tudo junto)](#1-com-docker-tudo-junto)
-  - [2. Em desenvolvimento (npm)](#2-em-desenvolvimento-npm)
+  - [1. Instalar o PostgreSQL (uma vez, no Windows)](#1-instalar-o-postgresql-uma-vez-no-windows)
+  - [2. Instalar e rodar o projeto](#2-instalar-e-rodar-o-projeto)
+  - [3. Opção: subir tudo em containers (Docker)](#3-opção-subir-tudo-em-containers-docker)
 - [Contas de demonstração](#contas-de-demonstração)
 - [Painel administrativo](#painel-administrativo)
 - [Pagamentos](#pagamentos)
@@ -85,10 +86,93 @@ learnup/
 
 ## Como rodar
 
-Pré-requisitos: **Node.js 20+** e npm. O banco exige **PostgreSQL 14+**
-(o Compose já sobe um PostgreSQL 16 para você).
+Você só precisa de duas coisas instaladas: **Node.js 20+** e **PostgreSQL 14+**.
+O banco roda **direto no seu Windows**, sem Docker.
 
-### 1. Com Docker (tudo junto)
+> **Resumo:** instale o PostgreSQL uma vez, crie o usuário e os dois bancos,
+> e na pasta `LearnUp` rode `npm run instalar` e depois `npm run dev`.
+
+### 1. Instalar o PostgreSQL (uma vez, no Windows)
+
+1. Baixe o instalador do PostgreSQL 16 em
+   <https://www.postgresql.org/download/windows/> e execute.
+2. Na tela de componentes, marque **Command Line Tools** para o `psql`
+   ficar disponível no terminal.
+3. Mantenha a **porta 5432** e anote a senha do superusuário `postgres`.
+4. Ao terminar, o Windows já registra o banco como serviço e ele **liga
+   sozinho** com o computador.
+
+#### Criar o usuário e os dois bancos
+
+Abra o **SQL Shell do PostgreSQL** (menu Iniciar) e rode:
+
+```sql
+CREATE ROLE learnup LOGIN CREATEDB PASSWORD 'learnup';
+CREATE DATABASE learnup      OWNER learnup ENCODING 'UTF8';
+CREATE DATABASE learnup_test OWNER learnup ENCODING 'UTF8';
+```
+
+O banco `learnup` é o da aplicação; o `learnup_test` é o que a suíte de
+testes usa (está em `backend/.env.test`).
+
+#### Se o Windows bloquear o psql (Smart App Control)
+
+Alguns Windows 11 com **Smart App Control** ligado bloqueiam a `libpq.dll`
+do PostgreSQL porque ela não vem assinada digitalmente. O sintoma é o
+comando `psql`/`initdb` não abrir, ou o serviço do banco não iniciar.
+
+Duas formas de resolver:
+
+**a) Desligar o Smart App Control** (o Windows reinicia):
+*Configurações → Segurança do Windows → Segurança do Windows →
+Controle de Aplicativos e Navegador → Controle de Aplicativos →
+Avaliação de Aplicativos → Smart App Control*.
+
+**b) Assinar a `libpq.dll` com um certificado local.** Abra o PowerShell
+**como administrador** e rode (ajuste o caminho se o PostgreSQL estiver em
+outro lugar):
+
+```powershell
+$bin = "C:\Program Files\PostgreSQL\16\bin"
+$cert = New-SelfSignedCertificate -Type CodeSigningCert `
+  -Subject "CN=LearnUp" -CertStoreLocation Cert:\CurrentUser\My `
+  -KeyUsage DigitalSignature -TextExtension @("2.5.29.37={text}1.3.6.1.5.5.7.3.3")
+Get-ChildItem $bin -Filter *.dll | ForEach-Object {
+  Set-AuthenticodeSignature $_.FullName -Certificate $cert | Out-Null }
+Restart-Service postgresql-x64-16
+```
+
+Vale saber: a API usa a biblioteca `pg`, que é JavaScript puro e **não**
+depende da `libpq.dll`. Se a API subir e o site funcionar, mesmo com os
+comandos do PostgreSQL quebrados, o projeto está pronto para usar.
+
+### 2. Instalar e rodar o projeto
+
+Tudo acontece na pasta `LearnUp`, com dois comandos:
+
+```bash
+npm run instalar     # instala dependências, cria as tabelas e popula com dados de exemplo
+npm run dev          # liga a API e o site juntos (Ctrl+C para parar)
+```
+
+Abra **http://localhost:5173**. A API responde em http://localhost:4000
+e o health check em http://localhost:4000/health.
+
+O que os comandos fazem por baixo:
+
+```bash
+npm install --prefix backend     # dependências da API
+npm install --prefix frontend    # dependências do site
+npm run db:reset --prefix backend   # migrations + seed
+```
+
+Se algo estiver errado, `npm run conferir` aponta exatamente o que falta
+e o comando para resolver.
+
+### 3. Opção: subir tudo em containers (Docker)
+
+Só para quem quiser o projeto inteiro em container. Não é preciso para
+desenvolver.
 
 ```bash
 cp .env.example .env             # defina os dois segredos JWT obrigatórios
@@ -99,9 +183,6 @@ docker compose exec api npm run migrate
 docker compose exec api npm run seed
 ```
 
-Acesse **http://localhost:5173**. A API responde em http://localhost:4000
-e o health check em http://localhost:4000/health.
-
 Para desligar:
 
 ```bash
@@ -109,35 +190,7 @@ docker compose down          # mantém o banco
 docker compose down -v       # apaga também o volume do Postgres
 ```
 
-### 2. Em desenvolvimento (npm)
-
-Rode dois terminais.
-
-**Terminal 1 — banco**
-
-```bash
-docker compose up -d db      # só o PostgreSQL na 5432
-```
-
-**Terminal 2 — API** (http://localhost:4000)
-
-```bash
-cd backend
-npm install
-cp .env.example .env         # ajuste DATABASE_URL se necessário
-npm run migrate              # cria o schema
-npm run seed                 # dados de demonstração (opcional, mas recomendado)
-npm run dev                  # ou: npm start
-```
-
-**Terminal 3 — frontend** (http://localhost:5173)
-
-```bash
-cd frontend
-npm install
-cp .env.example .env.local   # aponta para http://localhost:4000/api/v1
-npm run dev
-```
+### Detalhes do frontend
 
 O `.env.local` do frontend usa o **proxy do Vite**: `VITE_API_URL=/api/v1`
 (mesma origem) e `VITE_PROXY_TARGET=http://localhost:4000` (para onde o
@@ -145,6 +198,19 @@ Vite repassa). Assim o browser nunca faz cross-origin e o CORS da API
 nem entra na conta em desenvolvimento. Se apontar `VITE_API_URL` direto
 para `http://localhost:4000/api/v1`, funciona também — a API aceita
 `http://localhost:5173` no CORS —, mas aí a chamada vira cross-origin.
+
+### Scripts da pasta LearnUp
+
+| Comando | O que faz |
+| --- | --- |
+| `npm run instalar` | instalação completa: dependências, `.env`, tabelas e seed |
+| `npm run dev` | liga API (4000) e site (5173) juntos |
+| `npm run conferir` | diagnostica o ambiente e diz o que falta |
+| `npm run banco` | confere o PostgreSQL local e explica como instalar se faltar |
+| `npm run db:reset` | recria as tabelas e coloca os dados de exemplo |
+| `npm run db:status` | lista as migrations já aplicadas |
+| `npm test` | roda a suíte E2E do backend |
+| `npm run build` | build de produção do site |
 
 ### Scripts
 
