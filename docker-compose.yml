@@ -1,0 +1,67 @@
+# LearnUp - stack completa (PostgreSQL + API + SPA).
+#
+#   docker compose up -d --build     sobe tudo
+#   docker compose exec api npm run migrate
+#   docker compose exec api npm run seed
+#   open http://localhost:5173
+#
+# O serviço `web` fala com a API pela mesma origem (/api), então o proxy do
+# nginx repassa /api para o container da API e não depende de CORS.
+
+services:
+  db:
+    image: postgres:16-alpine
+    container_name: learnup-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: learnup
+      POSTGRES_PASSWORD: learnup
+      POSTGRES_DB: learnup
+    ports:
+      - "127.0.0.1:5432:5432"
+    volumes:
+      - learnup-pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U learnup -d learnup"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  api:
+    build:
+      context: ./backend
+    container_name: learnup-api
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      NODE_ENV: ${NODE_ENV:-development}
+      PORT: 4000
+      DATABASE_URL: postgres://learnup:learnup@db:5432/learnup
+      # Obrigatórios: use valores longos, aleatórios e diferentes.
+      JWT_SECRET: ${JWT_SECRET:?Defina JWT_SECRET no ambiente ou .env da raiz}
+      JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET:?Defina JWT_REFRESH_SECRET no ambiente ou .env da raiz}
+      CORS_ORIGIN: http://localhost:5173
+      COOKIE_SECURE: ${COOKIE_SECURE:-false}
+      PAYMENT_PROVIDER: ${PAYMENT_PROVIDER:-mock}
+      RATE_LIMIT: "true"
+    ports:
+      - "127.0.0.1:4000:4000"
+    command: ["sh", "-c", "node src/db/migrate.js up && node src/server.js"]
+
+  web:
+    build:
+      context: ./frontend
+      args:
+        # Build da SPA com a API na mesma origem do nginx.
+        VITE_API_URL: /api/v1
+    container_name: learnup-web
+    restart: unless-stopped
+    depends_on:
+      - api
+    ports:
+      - "5173:80"
+
+volumes:
+  learnup-pgdata:

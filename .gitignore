@@ -1,0 +1,28 @@
+# Dependências e resultados de build: gerados automaticamente, nunca versionados.
+node_modules/
+dist/
+build/
+coverage/
+
+# Configurações com senha/segredo: só os .example vão para o histórico.
+.env
+.env.local
+.env.*.local
+#
+# Exceção deliberada: backend/.env.test É versionado. Ele só aponta para o
+# banco local de testes (learnup_test) e não tem segredo nenhum - é preciso
+# que esteja no histórico para `npm test` funcionar numa máquina nova.
+
+# Logs e sobras de execução local.
+npm-debug.log*
+yarn-error.log*
+*.log
+*.err
+*.pid
+tmp-*
+
+# Sistema operacional e editores.
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/

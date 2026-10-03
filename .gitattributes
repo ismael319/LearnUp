@@ -1,0 +1,23 @@
+# Normaliza as quebras de linha para que o mesmo arquivo não mude sozinho
+# Depending do Windows e do editor. Sem isto o Git fica emitindo avisos
+# "LF will be replaced by CRLF" e alguns arquivos "mudam" sem ninguém editar.
+
+* text=auto eol=lf
+
+# Scripts que o Windows precisa ler com CRLF.
+*.cmd text eol=crlf
+*.bat text eol=crlf
+*.ps1 text eol=crlf
+
+# Arquivos que nunca devem ter troca de linha aplicada.
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.pdf binary
+*.woff binary
+*.woff2 binary
+
+# O lockfile é gerado pelo npm: deixar o texto dele como está.
+package-lock.json -diff
