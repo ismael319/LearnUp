@@ -26,11 +26,11 @@ Não precisa de cartão de crédito nesta fase.
 
 ## 2. Enviar o código para o GitHub
 
-O repositório de destino é `https://github.com/ismael708/LearnUp`.
+O repositório de destino é `https://github.com/ismael319/LearnUp`.
 
 ```powershell
 cd "$HOME\OneDrive\Desktop\LearnUp"
-git remote set-url origin https://github.com/ismael708/LearnUp.git
+git remote set-url origin https://github.com/ismael319/LearnUp.git
 git push -u origin main
 ```
 
