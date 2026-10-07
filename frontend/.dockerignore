@@ -1,0 +1,16 @@
+# Contexto de build da SPA.
+#
+# O Dockerfile faz `COPY . .`, então sem este arquivo o `node_modules` do
+# Windows e o `dist` antigo entram na imagem. O `.env.local` também é excluído
+# de propósito: a URL da API chega por build-arg (VITE_API_URL).
+node_modules
+dist
+.env
+.env.*
+!.env.example
+*.log
+coverage
+.git
+.gitignore
+Dockerfile
+.dockerignore

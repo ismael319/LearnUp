@@ -1,0 +1,17 @@
+# Contexto de build da API.
+#
+# O Dockerfile copia apenas `package*.json` e `src`, mas o contexto inteiro é
+# enviado ao daemon antes disso. Sem este arquivo, o `node_modules` do Windows
+# (binários incompatíveis com Linux) e os `.env` com segredos viajam junto.
+node_modules
+.env
+.env.*
+!.env.example
+*.log
+*.err
+coverage
+tests
+.git
+.gitignore
+Dockerfile
+.dockerignore

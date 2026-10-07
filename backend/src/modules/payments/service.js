@@ -14,27 +14,44 @@ const ORDER_SELECT = `
          o.provider, o.provider_ref AS "providerRef", o.checkout_url AS "checkoutUrl",
          o.pix_qr_code AS "pixQrCode", o.pix_copy_code AS "pixCopyCode",
          o.paid_at AS "paidAt", o.created_at AS "createdAt",
-         c.title AS "courseTitle", c.slug AS "courseSlug", c.cover_url AS "coverUrl"
-    FROM orders o JOIN courses c ON c.id = o.course_id
+          c.title AS "courseTitle", c.slug AS "courseSlug", c.cover_url AS "coverUrl",
+          COALESCE(items.items, '[]'::json) AS items
+    FROM orders o
+    JOIN courses c ON c.id = o.course_id
+    LEFT JOIN LATERAL (
+      SELECT json_agg(json_build_object(
+        'courseId', oi.course_id, 'title', oi.title, 'coverUrl', oi.cover_url,
+        'unitCents', oi.unit_cents, 'slug', ic.slug
+      ) ORDER BY oi.created_at) AS items
+      FROM order_items oi JOIN courses ic ON ic.id = oi.course_id
+      WHERE oi.order_id = o.id
+    ) items ON true
 `;
 
 export const createOrderSchema = z.object({
-  courseId: z.string().uuid(),
+  courseIds: z.array(z.string().uuid()).min(1).max(20).optional(),
+  // Aceito apenas durante a transição de links antigos de checkout.
+  courseId: z.string().uuid().optional(),
   method: z.enum(['pix', 'card', 'paypal']).default('pix'),
+}).superRefine((body, ctx) => {
+  if (!body.courseIds?.length && !body.courseId) {
+    ctx.addIssue({ code: 'custom', message: 'Informe pelo menos um curso.', path: ['courseIds'] });
+  }
 });
 
 /**
  * Cria o pedido e já chama o gateway. Reaproveita um pedido pendente
  * do mesmo usuário/curso/método em vez de duplicar cobranças.
  */
-export async function createOrder(user, { courseId, method }) {
-  const course = await queryOne(
-    `SELECT id, title, price_cents, original_price_cents, status, certificate_enabled
-       FROM courses WHERE id = $1`,
-    [courseId],
+export async function createOrder(user, { courseIds, courseId, method }) {
+  const ids = [...new Set(courseIds?.length ? courseIds : [courseId])];
+  const courses = await queryAll(
+    `SELECT id, title, cover_url, price_cents, original_price_cents, status, certificate_enabled
+       FROM courses WHERE id = ANY($1::uuid[])`,
+    [ids],
   );
-  if (!course) throw notFound('Curso não encontrado.');
-  if (course.status !== 'published') throw notFound('Curso indisponível para compra.');
+  if (courses.length !== ids.length) throw notFound('Um dos cursos não foi encontrado.');
+  if (courses.some((course) => course.status !== 'published')) throw notFound('Um dos cursos está indisponível para compra.');
 
   /*
    * Só uma matrícula ATIVA bloqueia a compra. Uma reembolsada ou cancelada não:
@@ -42,22 +59,14 @@ export async function createOrder(user, { courseId, method }) {
    * — é para isso que o `enrollFromOrder` reativa o acesso no pagamento. O que
    * não pode é acontecer de um aluno já matriculado gerar um segundo pedido.
    */
-  const already = await queryOne('SELECT id, status FROM enrollments WHERE user_id = $1 AND course_id = $2', [
-    user.id,
-    courseId,
-  ]);
-  if (already?.status === 'active') throw conflict('Você já está matriculado neste curso.');
-  if (already?.status === 'canceled') {
-    throw conflict('Sua matrícula neste curso está cancelada. Fale com o suporte para reativá-la.', {
-      courseId,
-      enrollmentStatus: already.status,
-    });
-  }
-  if (course.price_cents === 0) {
-    throw badRequest('Este curso é gratuito: use POST /enrollments para se matricular.');
-  }
+  const enrollments = await queryAll('SELECT course_id, status FROM enrollments WHERE user_id = $1 AND course_id = ANY($2::uuid[])', [user.id, ids]);
+  const active = enrollments.find((enrollment) => enrollment.status === 'active');
+  if (active) throw conflict('Você já está matriculado em um dos cursos selecionados.', { courseId: active.course_id });
+  const canceled = enrollments.find((enrollment) => enrollment.status === 'canceled');
+  if (canceled) throw conflict('Uma matrícula selecionada está cancelada. Fale com o suporte para reativá-la.', { courseId: canceled.course_id });
+  if (courses.some((course) => course.price_cents === 0)) throw badRequest('Cursos gratuitos devem ser matriculados diretamente.');
 
-  const amount = course.price_cents;
+  const amount = courses.reduce((total, course) => total + course.price_cents, 0);
   // Descontos devem ser calculados de cupons/regras validadas no servidor.
   // Enquanto não existe esse domínio, o cliente não pode alterar o total.
   const discountCents = 0;
@@ -65,30 +74,29 @@ export async function createOrder(user, { courseId, method }) {
     throw badRequest('Método de pagamento indisponível para o provedor ativo.');
   }
 
-  const reusable = await queryOne(
-    `SELECT * FROM orders
-      WHERE user_id = $1 AND course_id = $2 AND method = $3
-        AND status = 'pending' AND created_at > now() - interval '30 minutes'
-      ORDER BY created_at DESC LIMIT 1`,
-    [user.id, courseId, method],
-  );
-  if (reusable) return { order: await getOrder(user.id, reusable.id), reused: true };
-
   const provider = paymentProvider();
 
   const { rows } = await query(
     `INSERT INTO orders (user_id, course_id, amount_cents, discount_cents, currency, method, status, provider)
      VALUES ($1, $2, $3, $4, $5, $6, 'pending', $7) RETURNING id`,
-    [user.id, courseId, amount, discountCents, config.payments.currency, method, provider.name],
+    [user.id, courses[0].id, amount, discountCents, config.payments.currency, method, provider.name],
   );
   const orderId = rows[0].id;
+
+  for (const course of courses) {
+    await query(
+      `INSERT INTO order_items (order_id, course_id, title, cover_url, unit_cents)
+       VALUES ($1, $2, $3, $4, $5)`,
+      [orderId, course.id, course.title, course.cover_url, course.price_cents],
+    );
+  }
 
   let payment;
   try {
     payment = await provider.createPayment({
       order: { id: orderId, amount_cents: amount, discount_cents: discountCents },
       user,
-      course,
+      course: courses[0],
       method,
     });
   } catch (err) {
@@ -133,7 +141,8 @@ export async function createOrder(user, { courseId, method }) {
     order = await getOrder(user.id, confirmed.order.id);
   }
 
-  return { order, course, reused: false };
+  // `course` preserva o contrato de consumidores antigos durante a transição.
+  return { order, course: courses[0], courses, reused: false };
 }
 
 export const getOrder = (userId, orderId) => queryOne(`${ORDER_SELECT} WHERE o.id = $1 AND o.user_id = $2`, [orderId, userId]);
@@ -174,17 +183,18 @@ export async function markOrderPaid({ orderId, provider, providerRef, rawPayload
       [order.id, provider ?? 'mock', 'paid', JSON.stringify(rawPayload ?? {})],
     );
 
-    const { enrollment, reactivated } = await enrollFromOrder(
-      { userId: order.user_id, courseId: order.course_id, orderId: order.id },
-      { client },
-    );
+    const { rows: items } = await client.query('SELECT course_id FROM order_items WHERE order_id = $1 ORDER BY created_at', [order.id]);
+    const outcomes = [];
+    for (const item of items) {
+      outcomes.push(await enrollFromOrder({ userId: order.user_id, courseId: item.course_id, orderId: order.id }, { client }));
+    }
     return {
       order: rows[0],
       alreadyPaid: false,
       userId: order.user_id,
-      courseId: order.course_id,
-      reactivated,
-      enrollmentId: enrollment?.id ?? null,
+      courseIds: items.map((item) => item.course_id),
+      reactivated: outcomes.some((outcome) => outcome.reactivated),
+      enrollmentIds: outcomes.map((outcome) => outcome.enrollment?.id).filter(Boolean),
     };
   });
 
@@ -203,24 +213,17 @@ export async function markOrderPaid({ orderId, provider, providerRef, rawPayload
    * pagamento continua válido e o aluno pode pedir o certificado pela tela.
    */
   if (result.reactivated) {
-    try {
-      const certificate = await issueCertificate(result.userId, result.courseId);
-      logger.info(
-        { orderId: result.order.id, courseId: result.courseId, code: certificate?.code },
-        'Recompra após reembolso: acesso e certificado restaurados',
-      );
-    } catch (err) {
-      logger.warn(
-        { err: err.message, orderId: result.order.id, courseId: result.courseId },
-        'Recompra reativou o acesso, mas o certificado não pôde ser restaurado',
-      );
+    for (const courseId of result.courseIds) {
+      try { await issueCertificate(result.userId, courseId); } catch (err) {
+        logger.warn({ err: err.message, orderId: result.order.id, courseId }, 'Recompra reativou o acesso, mas o certificado não pôde ser restaurado');
+      }
     }
   }
 
   // Badges não fazem parte da transação financeira e só rodam após o commit.
   await syncBadges(result.userId);
   logger.info(
-    { orderId: result.order.id, courseId: result.courseId, reactivated: result.reactivated },
+    { orderId: result.order.id, courseIds: result.courseIds, reactivated: result.reactivated },
     'Pagamento confirmado e matrícula ativa',
   );
   return result;

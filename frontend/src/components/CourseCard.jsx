@@ -85,9 +85,13 @@ export function CourseCard({ course, onEnroll, enrolling = false }) {
               Continuar
             </Link>
           ) : free ? (
-            <button type="button" className="btn btn-primary btn-sm" onClick={() => onEnroll?.(course)} disabled={enrolling}>
-              {enrolling ? 'Matrulando...' : 'Matricular'}
-            </button>
+            onEnroll ? (
+              <button type="button" className="btn btn-primary btn-sm" onClick={() => onEnroll(course)} disabled={enrolling}>
+                {enrolling ? 'Matriculando...' : 'Matricular'}
+              </button>
+            ) : (
+              <Link className="btn btn-primary btn-sm" to={`/cursos/${course.slug}`}>Matricular</Link>
+            )
           ) : (
             <Link className="course-card-cta" to={`/cursos/${course.slug}`}>
               Ver curso

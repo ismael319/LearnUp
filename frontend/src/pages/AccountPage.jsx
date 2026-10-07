@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
-import { learningApi, gamificationApi, certificatesApi } from '../api/client.js';
+import { authApi, learningApi, gamificationApi, certificatesApi, paymentsApi } from '../api/client.js';
 import { useApi } from '../hooks/useApi.js';
 import { useAuth } from '../context/AuthContext.jsx';
 import { Alert } from '../components/Alert.jsx';
@@ -9,10 +9,11 @@ import { ProgressBar } from '../components/ProgressBar.jsx';
 import { EmptyState, ErrorState, LoadingBlock } from '../components/Feedback.jsx';
 import { Icon } from '../components/Icon.jsx';
 import { downloadCertificate } from '../api/download.js';
-import { formatDate, formatNumber, badgeIcon } from '../utils/format.js';
+import { formatDate, formatNumber, formatPrice, badgeIcon } from '../utils/format.js';
 
 const TABS = [
   { id: 'cursos', label: 'Meus cursos' },
+  { id: 'compras', label: 'Minhas compras' },
   { id: 'certificados', label: 'Certificados' },
   { id: 'conquistas', label: 'Conquistas' },
   { id: 'perfil', label: 'Perfil' },
@@ -60,11 +61,29 @@ export function AccountPage() {
       </div>
 
       {tab === 'cursos' && <MyCourses onSeeCertificates={openCertificates} />}
+      {tab === 'compras' && <MyOrders />}
       {tab === 'certificados' && <MyCertificates key={tabRequest} />}
       {tab === 'conquistas' && <MyBadges />}
       {tab === 'perfil' && <MyProfile />}
     </div>
   );
+}
+
+function MyOrders() {
+  const { data, loading, error, refetch } = useApi(() => paymentsApi.orders(), []);
+  if (loading) return <LoadingBlock />;
+  if (error) return <ErrorState error={error} onRetry={refetch} />;
+  const orders = data?.orders ?? [];
+  if (!orders.length) return <EmptyState icon="cart" title="Nenhuma compra ainda" description="Os pedidos confirmados aparecerão aqui." action={<Link className="btn btn-primary" to="/catalogo">Explorar treinamentos</Link>} />;
+  return <div className="stack" style={{ gap: 12 }}>
+    {orders.map((order) => (
+      <article key={order.id} className="card card-pad stack" style={{ gap: 10 }}>
+        <div className="row-between wrap"><div><strong>Pedido {order.id.slice(0, 8).toUpperCase()}</strong><span className="tiny muted" style={{ display: 'block' }}>{formatDate(order.createdAt)}</span></div><span className={`badge ${order.status === 'paid' ? 'badge-success' : order.status === 'pending' ? 'badge-warning' : 'badge-danger'}`}>{order.status}</span></div>
+        {(order.items ?? []).map((item) => <div className="row-between small" key={item.courseId}><span>{item.title}</span><span>{formatPrice(item.unitCents)}</span></div>)}
+        <div className="row-between"><span className="small muted">{order.method}</span><strong>{formatPrice(order.amountCents)}</strong></div>
+      </article>
+    ))}
+  </div>;
 }
 
 function MyCourses({ onSeeCertificates }) {
@@ -253,6 +272,8 @@ function MyProfile() {
   const { user, updateProfile } = useAuth();
   const [form, setForm] = useState({ name: user.name, bio: user.bio ?? '', phone: user.phone ?? '' });
   const [state, setState] = useState({ busy: false, done: false, error: null });
+  const [password, setPassword] = useState({ currentPassword: '', newPassword: '', confirm: '' });
+  const [passwordState, setPasswordState] = useState({ busy: false, done: false, error: null });
 
   const submit = async (event) => {
     event.preventDefault();
@@ -263,6 +284,20 @@ function MyProfile() {
     } catch (error) {
       setState({ busy: false, done: false, error });
     }
+  };
+
+  const changePassword = async (event) => {
+    event.preventDefault();
+    if (password.newPassword !== password.confirm) {
+      setPasswordState({ busy: false, done: false, error: new Error('A confirmação da nova senha não confere.') });
+      return;
+    }
+    setPasswordState({ busy: true, done: false, error: null });
+    try {
+      await authApi.changePassword({ currentPassword: password.currentPassword, newPassword: password.newPassword });
+      setPasswordState({ busy: false, done: true, error: null });
+      setPassword({ currentPassword: '', newPassword: '', confirm: '' });
+    } catch (error) { setPasswordState({ busy: false, done: false, error }); }
   };
 
   return (
@@ -299,15 +334,22 @@ function MyProfile() {
         </button>
       </form>
 
+      <div className="stack" style={{ gap: 16 }}>
       <div className="card card-pad stack">
         <h2 style={{ margin: 0 }}>Conta</h2>
         <p className="small muted" style={{ margin: 0 }}>E-mail: <strong>{user.email}</strong></p>
         <p className="small muted" style={{ margin: 0 }}>Função: <strong>{user.role}</strong></p>
         <p className="small muted" style={{ margin: 0 }}>Membro desde {formatDate(user.createdAt ?? new Date().toISOString())}</p>
-        <hr className="divider" style={{ margin: '4px 0' }} />
-        <p className="tiny muted" style={{ margin: 0 }}>
-          A troca de senha está disponível na API (<code>POST /auth/change-password</code>) e ainda não tem tela dedicada.
-        </p>
+      </div>
+      <form className="card card-pad stack" onSubmit={changePassword}>
+        <h2 style={{ margin: 0 }}>Alterar senha</h2>
+        {passwordState.error && <Alert variant="danger">{passwordState.error.message}</Alert>}
+        {passwordState.done && <Alert variant="success">Senha alterada. Entre novamente para continuar.</Alert>}
+        <input className="input" type="password" placeholder="Senha atual" value={password.currentPassword} onChange={(e) => setPassword((value) => ({ ...value, currentPassword: e.target.value }))} required />
+        <input className="input" type="password" placeholder="Nova senha" value={password.newPassword} onChange={(e) => setPassword((value) => ({ ...value, newPassword: e.target.value }))} minLength="8" required />
+        <input className="input" type="password" placeholder="Confirme a nova senha" value={password.confirm} onChange={(e) => setPassword((value) => ({ ...value, confirm: e.target.value }))} minLength="8" required />
+        <button type="submit" className="btn btn-secondary" disabled={passwordState.busy}>{passwordState.busy ? 'Alterando...' : 'Alterar senha'}</button>
+      </form>
       </div>
     </div>
   );

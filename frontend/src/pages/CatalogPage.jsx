@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { coursesApi, learningApi } from '../api/client.js';
 import { useApi, useDebounced } from '../hooks/useApi.js';
@@ -12,7 +12,7 @@ import { LEVEL_LABEL, categoryIcon } from '../utils/format.js';
 
 const SORTS = [
   { value: 'relevance', label: 'Mais populares' },
-  { value: 'newest', label: 'Novestros' },
+  { value: 'newest', label: 'Mais recentes' },
   { value: 'rating', label: 'Melhor avaliados' },
   { value: 'price_asc', label: 'Menor preço' },
   { value: 'price_desc', label: 'Maior preço' },
@@ -34,6 +34,18 @@ export function CatalogPage() {
   const [search, setSearch] = useState(params.get('search') ?? '');
   const debouncedSearch = useDebounced(search, 400);
   const [notice, setNotice] = useState(null);
+
+  useEffect(() => {
+    setSearch(params.get('search') ?? '');
+  }, [params]);
+
+  useEffect(() => {
+    const next = new URLSearchParams(params);
+    if (debouncedSearch) next.set('search', debouncedSearch);
+    else next.delete('search');
+    next.delete('page');
+    if (next.toString() !== params.toString()) setParams(next, { replace: true });
+  }, [debouncedSearch]);
 
   const filters = {
     search: debouncedSearch || undefined,
@@ -76,7 +88,7 @@ export function CatalogPage() {
   };
 
   const activeFilters =
-    [filters.category, filters.level, filters.price ? params.get('price') : null, debouncedSearch].filter(Boolean).length;
+    [filters.category, filters.level, params.get('price'), debouncedSearch].filter(Boolean).length;
 
   return (
     <div className="container page">
@@ -85,7 +97,7 @@ export function CatalogPage() {
           <h1 style={{ margin: 0 }}>Catálogo de cursos</h1>
           <p className="muted" style={{ margin: 0 }}>
             {loading ? 'Carregando...' : `${data?.meta.total ?? 0} cursos disponíveis`}
-            {user && ' · faça login para acompanhar seu progresso'}
+            {!user && ' · entre para acompanhar seu progresso'}
           </p>
         </div>
       </header>

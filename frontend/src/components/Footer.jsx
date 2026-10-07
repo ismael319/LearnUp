@@ -1,6 +1,8 @@
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { Icon } from './Icon.jsx';
+import { platformApi } from '../api/client.js';
+import { useApi } from '../hooks/useApi.js';
 
 const NAV_LINKS = [
   { to: '/catalogo', label: 'Cursos' },
@@ -20,6 +22,10 @@ const SOCIAL = [
 export function Footer() {
   const [query, setQuery] = useState('');
   const navigate = useNavigate();
+  const { data: platform } = useApi(() => platformApi.settings(), []);
+  const settings = platform?.settings ?? {};
+  const name = settings['platform.name'] ?? 'LearnUp';
+  const whatsapp = String(settings['platform.whatsapp'] ?? '').replace(/\D/g, '');
 
   const search = (event) => {
     event.preventDefault();
@@ -36,17 +42,17 @@ export function Footer() {
               <span className="logo-mark" aria-hidden="true">
                 <Icon name="cap" size={18} />
               </span>
-              LearnUp
+              {name}
             </Link>
             <p className="small muted" style={{ maxWidth: 340, margin: 0 }}>
-              Cursos online com acompanhamento de progresso, quizzes, certificados verificáveis
+              {settings['platform.tagline'] ?? 'Cursos online'} com acompanhamento de progresso, quizzes, certificados verificáveis
               e uma comunidade de alunos.
             </p>
             <div className="row" style={{ gap: 8 }}>
-              {SOCIAL.map((item) => (
+              {SOCIAL.filter((item) => item.icon !== 'whatsapp' || whatsapp).map((item) => (
                 <a
                   key={item.label}
-                  href={item.href}
+                  href={item.icon === 'whatsapp' ? `https://wa.me/${whatsapp}` : item.href}
                   className="social-link"
                   target="_blank"
                   rel="noreferrer noopener"
@@ -92,12 +98,12 @@ export function Footer() {
 
         <div className="footer-bottom">
           <p className="tiny muted" style={{ margin: 0 }}>
-            © {new Date().getFullYear()} LearnUp · Projeto de demonstração
+            © {new Date().getFullYear()} {settings['platform.legal_name'] ?? name}{settings['platform.document'] ? ` · CNPJ ${settings['platform.document']}` : ''}
           </p>
           <div className="row wrap" style={{ gap: 16 }}>
-            <span className="badge">Node.js + Express</span>
-            <span className="badge">PostgreSQL</span>
-            <span className="badge">React</span>
+            <Link className="footer-link" to="/termos">Termos de uso</Link>
+            <Link className="footer-link" to="/privacidade">Privacidade</Link>
+            <Link className="footer-link" to="/contato">Contato</Link>
           </div>
         </div>
       </div>

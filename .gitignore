@@ -8,6 +8,9 @@ coverage/
 .env
 .env.local
 .env.*.local
+# Segredos gerados para a hospedagem (colar no painel do Render), nunca versionados.
+deploy-secrets.local.txt
+*.local.txt
 #
 # Exceção deliberada: backend/.env.test É versionado. Ele só aponta para o
 # banco local de testes (learnup_test) e não tem segredo nenhum - é preciso

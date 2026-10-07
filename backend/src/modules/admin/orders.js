@@ -36,7 +36,9 @@ export async function listOrders(filters) {
   const f = where();
   if (filters.status) f.add('o.status = ?', filters.status);
   if (filters.method) f.add('o.method = ?', filters.method);
-  if (filters.courseId) f.add('o.course_id = ?', filters.courseId);
+  if (filters.courseId) {
+    f.add('EXISTS (SELECT 1 FROM order_items oi_filter WHERE oi_filter.order_id = o.id AND oi_filter.course_id = ?)', filters.courseId);
+  }
   if (filters.userId) f.add('o.user_id = ?', filters.userId);
   if (filters.from) f.add('o.created_at >= ?::date', filters.from);
   if (filters.to) f.add('o.created_at < (?::date + interval \'1 day\')', filters.to);
@@ -166,23 +168,21 @@ export async function refundOrder(actor, orderId, reason) {
       [order.id],
     );
 
-    let enrollment = null;
-    if (order.enrollmentId && order.enrollmentStatus === 'active') {
-      const { rows } = await client.query(
-        `UPDATE enrollments
-            SET status = 'refunded', canceled_at = now(), canceled_by = $2, cancel_reason = $3
-          WHERE id = $1
-          RETURNING id, status, canceled_at AS "canceledAt"`,
-        [order.enrollmentId, actor.id, clean],
-      );
-      enrollment = rows[0];
-    }
+    const { rows: enrollments } = await client.query(
+      `UPDATE enrollments
+          SET status = 'refunded', canceled_at = now(), canceled_by = $2, cancel_reason = $3
+        WHERE user_id = $1 AND status = 'active'
+          AND course_id IN (SELECT course_id FROM order_items WHERE order_id = $4)
+        RETURNING id, status, canceled_at AS "canceledAt"`,
+      [order.user_id, actor.id, clean, order.id],
+    );
 
     const { rows: certs } = await client.query(
       `UPDATE certificates
           SET revoked_at = COALESCE(revoked_at, now()), revoked_reason = $3
-        WHERE user_id = $1 AND course_id = $2 AND revoked_at IS NULL RETURNING id, code`,
-      [order.user_id, order.course_id, `Reembolso do pedido ${order.id.slice(0, 8)}. ${clean}`],
+        WHERE user_id = $1 AND course_id IN (SELECT course_id FROM order_items WHERE order_id = $2)
+          AND revoked_at IS NULL RETURNING id, code`,
+        [order.user_id, order.id, `Reembolso do pedido ${order.id.slice(0, 8)}. ${clean}`],
     );
 
     await recordAudit(client, actor, 'order.refund', { type: 'order', id: order.id }, {
@@ -190,13 +190,13 @@ export async function refundOrder(actor, orderId, reason) {
       before: { status: order.status, enrollmentStatus: order.enrollmentStatus },
       after: {
         status: 'refunded',
-        enrollmentStatus: enrollment?.status ?? order.enrollmentStatus,
+        refundedEnrollments: enrollments.length,
         revokedCertificates: certs.length,
         reason: clean,
       },
     });
 
-    return { order: updated[0], enrollment, revokedCertificates: certs.length };
+    return { order: updated[0], enrollments, revokedCertificates: certs.length };
   });
 }
 

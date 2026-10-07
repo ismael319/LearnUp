@@ -9,6 +9,7 @@ import { CourseCard } from '../components/CourseCard.jsx';
 import { ProgressBar } from '../components/ProgressBar.jsx';
 import { EmptyState, ErrorState, LoadingBlock, Spinner } from '../components/Feedback.jsx';
 import { Icon } from '../components/Icon.jsx';
+import { useCart } from '../context/CartContext.jsx';
 import { formatDuration, formatPrice, formatRating, formatNumber, timeAgo, LEVEL_LABEL } from '../utils/format.js';
 
 const TABS = [
@@ -38,11 +39,13 @@ export function CourseDetailPage() {
   const { slug } = useParams();
   const { user, isAuthenticated } = useAuth();
   const navigate = useNavigate();
+  const { add } = useCart();
 
   const [tab, setTab] = useState('sobre');
   const [enrolled, setEnrolled] = useState(false);
   const [progressPct, setProgressPct] = useState(0);
   const [actionError, setActionError] = useState(null);
+  const [review, setReview] = useState({ rating: '5', comment: '' });
 
   // A API responde no envelope `{ course: {...} }`; desembrulhamos aqui para
   // o resto da página usar `course.id`, `course.title` etc. direto.
@@ -51,7 +54,7 @@ export function CourseDetailPage() {
   const { data: publicSettings } = useApi(() => platformApi.settings(), []);
   // `/reviews` do backend só aceita UUID (o `detail` resolve slug, o reviews
   // não), então passamos `course.id` e não o slug da URL.
-  const { data: reviewsData } = useApi(() => coursesApi.reviews(course.id), [course?.id], { skip: !course });
+  const { data: reviewsData, refetch: refetchReviews } = useApi(() => coursesApi.reviews(course.id), [course?.id], { skip: !course });
   const { data: related } = useApi(
     () => coursesApi.list({ category: course.categorySlug, limit: 4, sort: 'relevance' }),
     [course?.id],
@@ -62,6 +65,11 @@ export function CourseDetailPage() {
     const { enrollment } = await learningApi.enrollFree(course.id);
     setEnrolled(true);
     return enrollment;
+  });
+  const { submit: submitReview, loading: savingReview } = useSubmit(async () => {
+    await coursesApi.addReview(course.id, { rating: Number(review.rating), comment: review.comment });
+    setReview({ rating: '5', comment: '' });
+    return refetchReviews();
   });
 
   // O detalhe não traz o progresso: buscamos na lista de matrículas.
@@ -110,7 +118,8 @@ export function CourseDetailPage() {
       navigate('/entrar', { state: { from: `/cursos/${slug}` } });
       return;
     }
-    navigate(`/checkout/${course.id}`);
+    add(course);
+    navigate('/carrinho');
   };
 
   if (loading) return <LoadingBlock label="Carregando curso..." />;
@@ -311,7 +320,7 @@ export function CourseDetailPage() {
                         <div className="course-module-body">
                           {module.description && <p className="small muted">{module.description}</p>}
                           {preview && (
-                            <Link className="btn btn-ghost btn-sm" to={`/aprender/${course.id}?aula=${preview.id}`}>
+                            <Link className="btn btn-ghost btn-sm" to={`/prever/${course.id}?aula=${preview.id}`}>
                               <Icon name="play" size={14} /> Abrir prévia
                             </Link>
                           )}
@@ -326,6 +335,16 @@ export function CourseDetailPage() {
 
           {tab === 'avaliacoes' && (
             <div className="card card-pad stack">
+              {enrolled && (
+                <form className="card card-pad stack" onSubmit={(event) => { event.preventDefault(); submitReview().catch((err) => setActionError(err.message)); }}>
+                  <strong>Conte como foi sua experiência</strong>
+                  <select className="select" value={review.rating} onChange={(event) => setReview((value) => ({ ...value, rating: event.target.value }))} aria-label="Sua nota">
+                    {[5, 4, 3, 2, 1].map((rating) => <option key={rating} value={rating}>{rating} estrela{rating === 1 ? '' : 's'}</option>)}
+                  </select>
+                  <textarea className="textarea" value={review.comment} onChange={(event) => setReview((value) => ({ ...value, comment: event.target.value }))} placeholder="Comentário opcional" maxLength="1000" />
+                  <button type="submit" className="btn btn-secondary" disabled={savingReview}>{savingReview ? 'Enviando...' : 'Enviar avaliação'}</button>
+                </form>
+              )}
               <div className="row" style={{ gap: 24, flexWrap: 'wrap' }}>
                 {/* Sem avaliações não há nota: "0,0" com cinco estrelas vazias
                     parece um erro. Dizer que ainda não há é o correcto. */}
@@ -432,8 +451,8 @@ export function CourseDetailPage() {
                 {enrolling && <Spinner />}
                 {free ? 'Matricular-se grátis' : 'Comprar curso'}
               </button>
-              <button type="button" className="btn btn-secondary btn-block" onClick={goToLearn} disabled={enrolling}>
-                Ver aulas
+              <button type="button" className="btn btn-secondary btn-block" onClick={() => setTab('conteudo')}>
+                Ver conteúdo
               </button>
             </>
           )}

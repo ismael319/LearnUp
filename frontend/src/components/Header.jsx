@@ -3,6 +3,9 @@ import { Link, NavLink, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext.jsx';
 import { Avatar } from './Avatar.jsx';
 import { Icon } from './Icon.jsx';
+import { useCart } from '../context/CartContext.jsx';
+import { platformApi } from '../api/client.js';
+import { useApi } from '../hooks/useApi.js';
 
 const NAV = [
   { to: '/catalogo', label: 'Catálogo' },
@@ -17,6 +20,16 @@ export function Header() {
   const [accountOpen, setAccountOpen] = useState(false);
   const accountRef = useRef(null);
   const navigate = useNavigate();
+  const { items } = useCart();
+  const { data: platform } = useApi(() => platformApi.settings(), []);
+  const name = platform?.settings?.['platform.name'] ?? 'LearnUp';
+  const demoMode = platform?.settings?.['platform.demo_mode'] === true;
+  const [theme, setTheme] = useState(() => localStorage.getItem('learnup.theme') ?? 'dark');
+
+  useEffect(() => {
+    document.documentElement.dataset.theme = theme;
+    localStorage.setItem('learnup.theme', theme);
+  }, [theme]);
 
   const close = () => setMenuOpen(false);
 
@@ -56,7 +69,7 @@ export function Header() {
           <span className="logo-mark" aria-hidden="true">
             <Icon name="cap" size={18} />
           </span>
-          LearnUp
+          {name}
         </Link>
 
         <nav className="nav" aria-label="Navegação principal">
@@ -68,6 +81,13 @@ export function Header() {
         </nav>
 
         <div className="header-actions">
+          <button type="button" className="icon-button" onClick={() => setTheme((value) => value === 'dark' ? 'light' : 'dark')} aria-label={theme === 'dark' ? 'Usar tema claro' : 'Usar tema escuro'}>
+            <Icon name={theme === 'dark' ? 'sun' : 'moon'} size={19} />
+          </button>
+          <Link to="/carrinho" className="icon-button cart-button" aria-label={`Carrinho com ${items.length} item${items.length === 1 ? '' : 'ns'}`}>
+            <Icon name="cart" size={20} />
+            {items.length > 0 && <span className="cart-count">{items.length}</span>}
+          </Link>
           {isAuthenticated ? (
             <div className="account" ref={accountRef}>
               <button
@@ -122,6 +142,15 @@ export function Header() {
           )}
         </div>
       </div>
+
+      {demoMode && (
+        <div className="demo-banner">
+          <div className="container demo-banner-inner">
+            <Icon name="sparkle" size={14} />
+            <span>Ambiente de demonstração — os pagamentos são simulados e nenhum valor real é cobrado.</span>
+          </div>
+        </div>
+      )}
 
       {menuOpen && (
         <nav className="mobile-nav open" aria-label="Navegação móvel">

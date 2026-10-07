@@ -162,13 +162,13 @@ export function AboutPage() {
       <h1>Sobre a LearnUp</h1>
       <div className="card card-pad stack">
         <p>
-          A LearnUp é uma plataforma de cursos online criada como projeto de demonstração full-stack.
-          O objetivo é mostrar um fluxo completo de aprendizagem: descobrir um curso, assistir às aulas,
+          A LearnUp é uma plataforma de cursos online para capacitação profissional.
+          Você encontra um fluxo completo de aprendizagem: descobrir um curso, assistir às aulas,
           responder quizzes, acompanhar o progresso, conversar na comunidade e receber um certificado verificável.
         </p>
         <p>
-          Todo o sistema é construído com Node.js, Express e PostgreSQL no backend, e React no frontend.
-          Os pagamentos usam um provider simulado por padrão, então nenhum valor real é cobrado.
+          Os pagamentos usam um provider simulado enquanto a operação comercial não está configurada,
+          então nenhum valor real é cobrado neste ambiente.
         </p>
         <hr className="divider" />
         <h2 style={{ margin: 0 }}>Como funciona</h2>
@@ -183,6 +183,29 @@ export function AboutPage() {
       </div>
     </div>
   );
+}
+
+export function ContactPage() {
+  return <div className="container page" style={{ maxWidth: 760 }}>
+    <p className="eyebrow">Contato</p><h1>Fale com a nossa equipe</h1>
+    <div className="card card-pad stack">
+      <p className="muted">Use este canal para tirar dúvidas sobre acesso, treinamentos, certificados ou pedidos.</p>
+      <a className="btn btn-primary" style={{ alignSelf: 'flex-start' }} href="mailto:suporte@learnup.dev"><Icon name="mail" size={17} /> Enviar e-mail</a>
+      <p className="small muted" style={{ margin: 0 }}>O e-mail de suporte e o WhatsApp podem ser atualizados no painel administrativo.</p>
+    </div>
+  </div>;
+}
+
+export function LegalPage({ type }) {
+  const privacy = type === 'privacy';
+  return <div className="container page" style={{ maxWidth: 760 }}>
+    <p className="eyebrow">Informações legais</p><h1>{privacy ? 'Política de privacidade' : 'Termos de uso'}</h1>
+    <article className="card card-pad stack">
+      <p>{privacy ? 'Tratamos apenas os dados necessários para criar sua conta, liberar treinamentos, emitir certificados e prestar suporte.' : 'Ao utilizar a plataforma, você concorda em fornecer dados verdadeiros e manter suas credenciais de acesso em sigilo.'}</p>
+      <p>{privacy ? 'Dados pessoais não são comercializados. O acesso é restrito às finalidades operacionais, legais e de segurança da plataforma.' : 'O acesso a cada treinamento é pessoal e intransferível. Certificados dependem da conclusão integral dos requisitos definidos no curso.'}</p>
+      <p className="muted small">Este texto é um modelo inicial e deve ser revisado pela assessoria jurídica antes da publicação comercial.</p>
+    </article>
+  </div>;
 }
 
 export function NotFoundPage() {

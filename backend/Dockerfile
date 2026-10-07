@@ -20,8 +20,10 @@ COPY src ./src
 USER node
 
 EXPOSE 4000
+# A porta vem do ambiente: plataformas como o Render injetam PORT (ex.: 10000)
+# e roteiam para ela. Fixar 4000 aqui faria o healthcheck falhar nesses hosts.
 HEALTHCHECK --interval=30s --timeout=3s --start-period=20s --retries=3 \
-  CMD node -e "fetch('http://127.0.0.1:4000/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
+  CMD node -e "const p=process.env.PORT||4000;fetch('http://127.0.0.1:'+p+'/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
 
 ENTRYPOINT ["dumb-init", "--"]
 CMD ["node", "src/server.js"]

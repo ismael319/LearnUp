@@ -278,6 +278,7 @@ export const learningApi = {
   enrollFree: (courseId) => post('/enrollments', { courseId }),
   /** Alimenta o player: { course, enrollment, modules, totalLessons, completedLessons } */
   outline: (courseId) => get(`/enrollments/${courseId}/outline`),
+  preview: (courseId) => request('GET', `/enrollments/preview/${courseId}`, { auth: false }),
   progress: (courseId) => get(`/enrollments/${courseId}/progress`),
   saveProgress: (courseId, lessonId, body) => put(`/enrollments/${courseId}/lessons/${lessonId}`, body),
 };
@@ -299,7 +300,7 @@ export const certificatesApi = {
 
 export const paymentsApi = {
   methods: () => get('/payments/methods'),
-  /** method: pix | card | paypal */
+  /** courseIds: UUID[]; method: pix | card | paypal */
   createOrder: (body) => post('/payments/orders', body),
   orders: () => get('/payments/orders'),
   order: (id) => get(`/payments/orders/${id}`),

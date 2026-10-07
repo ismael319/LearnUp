@@ -1,12 +1,13 @@
 import { useEffect } from 'react';
 import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { AuthProvider, useAuth } from './context/AuthContext.jsx';
+import { CartProvider } from './context/CartContext.jsx';
 import { Header } from './components/Header.jsx';
 import { Footer } from './components/Footer.jsx';
 import { LoadingBlock } from './components/Feedback.jsx';
 import { AdminLayout } from './components/admin/AdminLayout.jsx';
 
-import { HomePage, AboutPage, NotFoundPage } from './pages/StaticPages.jsx';
+import { HomePage, AboutPage, ContactPage, LegalPage, NotFoundPage } from './pages/StaticPages.jsx';
 import { LoginPage } from './pages/LoginPage.jsx';
 import { RegisterPage } from './pages/RegisterPage.jsx';
 import { CatalogPage } from './pages/CatalogPage.jsx';
@@ -14,6 +15,8 @@ import { CourseDetailPage } from './pages/CourseDetailPage.jsx';
 import { CheckoutPage } from './pages/CheckoutPage.jsx';
 import { LearningPage } from './pages/LearningPage.jsx';
 import { AccountPage } from './pages/AccountPage.jsx';
+import { CartPage } from './pages/CartPage.jsx';
+import { PreviewPage } from './pages/PreviewPage.jsx';
 import { VerifyCertificatePage } from './pages/VerifyCertificatePage.jsx';
 import { ForumPage, ForumPostPage, NewPostPage, LeaderboardPage } from './pages/ForumPage.jsx';
 import { InstructorPage, CourseEditorPage } from './pages/InstructorPages.jsx';
@@ -73,6 +76,9 @@ function SiteShell() {
         <Routes>
           <Route path="/" element={<HomePage />} />
           <Route path="/sobre" element={<AboutPage />} />
+          <Route path="/contato" element={<ContactPage />} />
+          <Route path="/termos" element={<LegalPage type="terms" />} />
+          <Route path="/privacidade" element={<LegalPage type="privacy" />} />
           <Route path="/entrar" element={<LoginPage />} />
           <Route path="/cadastro" element={<RegisterPage />} />
           <Route path="/catalogo" element={<CatalogPage />} />
@@ -82,6 +88,9 @@ function SiteShell() {
           <Route path="/forum/novo" element={<RequireAuth><NewPostPage /></RequireAuth>} />
           <Route path="/forum/:postId" element={<ForumPostPage />} />
           <Route path="/verificar" element={<VerifyCertificatePage />} />
+          <Route path="/carrinho" element={<CartPage />} />
+          <Route path="/prever/:courseId" element={<PreviewPage />} />
+          <Route path="/checkout" element={<RequireAuth><CheckoutPage /></RequireAuth>} />
           <Route path="/checkout/:courseId" element={<RequireAuth><CheckoutPage /></RequireAuth>} />
           <Route path="/aprender/:courseId" element={<RequireAuth><LearningPage /></RequireAuth>} />
           <Route path="/minha-conta" element={<RequireAuth><AccountPage /></RequireAuth>} />
@@ -105,6 +114,7 @@ export default function App() {
   return (
     <BrowserRouter>
       <AuthProvider>
+        <CartProvider>
         <ScrollToTop />
         {/*
          * O painel tem shell próprio (menu lateral + topbar), sem o cabeçalho do
@@ -140,6 +150,7 @@ export default function App() {
 
           <Route path="*" element={<SiteShell />} />
         </Routes>
+        </CartProvider>
       </AuthProvider>
     </BrowserRouter>
   );

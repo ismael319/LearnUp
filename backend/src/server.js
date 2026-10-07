@@ -5,7 +5,9 @@ import { checkDatabase, closeDatabase } from './config/database.js';
 
 const app = createApp();
 
-const server = app.listen(config.port, async () => {
+// O host explícito importa em produção: dentro de um contêiner (Docker/Render)
+// o processo precisa aceitar conexões vindas de fora, e não só do loopback.
+const server = app.listen(config.port, '0.0.0.0', async () => {
   logger.info(
     { port: config.port, env: config.env, prefix: config.apiPrefix },
     `LearnUp API rodando em http://localhost:${config.port}${config.apiPrefix}`,

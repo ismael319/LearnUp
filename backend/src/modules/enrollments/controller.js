@@ -37,6 +37,22 @@ const progressSchema = z.object({
 });
 
 const router = Router();
+
+// Prévia pública: o serviço já remove vídeo e texto de toda aula que não foi
+// marcada como preview. Mantemos uma rota separada do player autenticado para
+// não transformar a regra de matrícula em uma condição opcional.
+router.get(
+  '/preview/:courseId',
+  validate({ params: params('courseId') }),
+  asyncHandler(async (req, res) => {
+    const outline = await getCourseOutline(null, req.params.courseId);
+    if (!outline.modules.some((module) => module.lessons.some((lesson) => lesson.isPreview))) {
+      throw notFound('Este curso não possui uma aula de prévia.');
+    }
+    res.json(outline);
+  }),
+);
+
 router.use(authenticate);
 
 // Matrículas -----------------------------------------------------------
